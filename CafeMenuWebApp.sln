@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35312.102
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CafeMenuWebApp", "CafeMenuWebApp.csproj", "{B678AD38-CDB3-4108-86A7-2B9D66E68AF3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B678AD38-CDB3-4108-86A7-2B9D66E68AF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B678AD38-CDB3-4108-86A7-2B9D66E68AF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B678AD38-CDB3-4108-86A7-2B9D66E68AF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B678AD38-CDB3-4108-86A7-2B9D66E68AF3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F58A36ED-3C3A-4D57-BC51-F2BEF96EA032}
+	EndGlobalSection
+EndGlobal

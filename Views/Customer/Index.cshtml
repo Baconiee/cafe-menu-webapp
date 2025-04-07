@@ -1,0 +1,81 @@
+﻿@model IEnumerable<CafeMenuWebApp.Models.Category>
+
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Müşteri Paneline Hoş Geldiniz!</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        .category-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+
+        .full-width-carousel {
+            width: 100vw; 
+            margin-left: calc(-50vw + 50%); 
+            position: relative;
+        }
+
+            .full-width-carousel .carousel-inner img {
+                width: 100%;
+                height: auto;
+            }
+    </style>
+</head>
+<body>
+    <div class="full-width-carousel">
+        <div id="carouselExampleInterval" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                <div class="carousel-item active" data-bs-interval="5000">
+                    <img src="~/images/cafefoto.jpg" class="d-block" alt="Slide 1">
+                </div>
+                <div class="carousel-item" data-bs-interval="5000">
+                    <img src="~/images/cafefoto1.jpg" class="d-block" alt="Slide 2">
+                </div>
+                <div class="carousel-item" data-bs-interval="5000">
+                    <img src="~/images/cafefoto3.jpg" class="d-block" alt="Slide 3">
+                </div>
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleInterval" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleInterval" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        </div>
+    </div>
+
+    <div style="height: 300px;"></div>
+
+    <div id="categories" class="container mt-5">
+        <div class="row">
+            <div class="col-6"></div>
+            <div class="col-12">
+                <div class="row">
+                    @foreach (var category in Model)
+                    {
+                        <div class="col-md-4 text-center">
+                            <a asp-controller="Customer" asp-action="Category" asp-route-categoryName="@category.CATEGORYNAME">
+                                <img src="@category.ImagePath" alt="@category.CATEGORYNAME" class="category-image" />
+                            </a>
+                            <h5 class="mt-2">@category.CATEGORYNAME</h5>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-6"></div>
+        </div>
+    </div>
+
+    <div style="height: 150px;"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

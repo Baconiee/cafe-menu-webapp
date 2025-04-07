@@ -1,0 +1,47 @@
+﻿@model CafeMenuWebApp.Models.Category
+
+<div class="container mt-5">
+    <h2>Edit Category</h2>
+    <form asp-action="EditCategory" method="post" enctype="multipart/form-data">
+        <input type="hidden" asp-for="CATEGORYID" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="form-group mb-3">
+            <label asp-for="CATEGORYNAME" class="form-label">Category Name</label>
+            <input asp-for="CATEGORYNAME" class="form-control" />
+            <span asp-validation-for="CATEGORYNAME" class="text-danger"></span>
+        </div>
+
+        <div class="form-group mb-3">
+            <label asp-for="PARENTCATEGORYID" class="form-label">Parent Category</label>
+            <select asp-for="PARENTCATEGORYID" class="form-control" asp-items="ViewBag.ParentCategories">
+                <option value="">None</option>
+            </select>
+            <span asp-validation-for="PARENTCATEGORYID" class="text-danger"></span>
+        </div>
+
+        <div class="form-group mb-3">
+            <label class="form-label">Current Image</label>
+            @if (!string.IsNullOrEmpty(Model.ImagePath))
+            {
+                <img src="@Model.ImagePath" alt="@Model.CATEGORYNAME" class="img-fluid mb-2" style="max-height: 200px;" />
+            }
+            else
+            {
+                <p>No image available</p>
+            }
+        </div>
+
+        <div class="form-group mb-3">
+            <label class="form-label">Upload New Image (optional)</label>
+            <input type="file" name="imageFile" class="form-control" />
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a asp-action="Categories" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

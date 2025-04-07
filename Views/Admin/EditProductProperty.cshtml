@@ -1,0 +1,30 @@
+﻿@model CafeMenuWebApp.Models.ProductProperty
+
+<div class="container mt-5">
+    <h4>Edit Product Property</h4>
+    <form asp-action="EditProductProperty" method="post" class="row g-3">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <input asp-for="PRODUCTPROPERYID" type="hidden" />
+
+        <div class="col-md-6 mb-3">
+            <label asp-for="PRODUCTID" class="form-label">Product</label>
+            <select asp-for="PRODUCTID" class="form-control" asp-items="ViewBag.Products" required>
+                <option value="">Select a Product</option>
+            </select>
+            <span asp-validation-for="PRODUCTID" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-6 mb-3">
+            <label asp-for="PROPERTYID" class="form-label">Property</label>
+            <select asp-for="PROPERTYID" class="form-control" asp-items="ViewBag.Properties" required>
+                <option value="">Select a Property</option>
+            </select>
+            <span asp-validation-for="PROPERTYID" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary">Edit Product Property</button>
+            <a asp-action="ProductProperties" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>

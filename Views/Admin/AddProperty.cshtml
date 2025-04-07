@@ -1,0 +1,24 @@
+﻿@model CafeMenuWebApp.Models.Property
+
+<div class="container mt-5">
+    <h2>Add Property</h2>
+
+    <form asp-action="AddProperty" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="form-group mb-3">
+            <label asp-for="KEY" class="form-label">Key</label>
+            <input asp-for="KEY" class="form-control" />
+            <span asp-validation-for="KEY" class="text-danger"></span>
+        </div>
+
+        <div class="form-group mb-3">
+            <label asp-for="VALUE" class="form-label">Value</label>
+            <input asp-for="VALUE" class="form-control" />
+            <span asp-validation-for="VALUE" class="text-danger"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a asp-action="Properties" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
