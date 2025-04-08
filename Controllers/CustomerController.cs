@@ -3,9 +3,8 @@ using CafeMenuWebApp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed; 
 using System.Text.Json;
-
 
 namespace CafeMenuWebApp.Controllers
 {
@@ -13,13 +12,13 @@ namespace CafeMenuWebApp.Controllers
     public class CustomerController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly IMemoryCache _cache;
+        private readonly IDistributedCache _cache; 
         private readonly IHttpClientFactory _httpClientFactory;
 
-        public CustomerController(ApplicationDbContext context, IMemoryCache cache, IHttpClientFactory httpClientFactory)
+        public CustomerController(ApplicationDbContext context, IDistributedCache cache, IHttpClientFactory httpClientFactory)
         {
             _context = context;
-            _cache = cache;
+            _cache = cache; 
             _httpClientFactory = httpClientFactory;
         }
 
@@ -39,34 +38,41 @@ namespace CafeMenuWebApp.Controllers
         private async Task<decimal> GetCurrencyRateAsync()
         {
             const string cacheKey = "USDtoTRYRate";
-            if (!_cache.TryGetValue(cacheKey, out decimal exchangeRate))
+
+            string cachedRate = await _cache.GetStringAsync(cacheKey);
+            if (cachedRate != null)
             {
-                var client = _httpClientFactory.CreateClient();
-                string apiKey = "26e9b072bfe042128c6410fb8";
-                string url = $"https://openexchangerates.org/api/latest.json?app_id={apiKey}&base=USD";
-
-                try
-                {
-                    var response = await client.GetStringAsync(url);
-                    var json = JsonSerializer.Deserialize<Dictionary<string, object>>(response);
-                    var rates = JsonSerializer.Deserialize<Dictionary<string, decimal>>(json["rates"].ToString());
-                    exchangeRate = rates["TRY"];
-
-                    
-                    _cache.Set(cacheKey, exchangeRate, TimeSpan.FromMinutes(10));
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Currency API error: {ex.Message}");
-                    exchangeRate = 1.0m; 
-                }
+                return decimal.Parse(cachedRate); 
             }
-            return exchangeRate;
+
+            var client = _httpClientFactory.CreateClient();
+            string apiKey = "26e9b072bfe042128c6410fb86061fb8";
+            string url = $"https://openexchangerates.org/api/latest.json?app_id={apiKey}&base=USD";
+
+            try
+            {
+                var response = await client.GetStringAsync(url);
+                var json = JsonSerializer.Deserialize<Dictionary<string, object>>(response);
+                var rates = JsonSerializer.Deserialize<Dictionary<string, decimal>>(json["rates"].ToString());
+                decimal exchangeRate = rates["TRY"];
+
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                };
+                await _cache.SetStringAsync(cacheKey, exchangeRate.ToString(), cacheOptions);
+
+                return exchangeRate;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Currency API error: {ex.Message}");
+                return 1.0m; 
+            }
         }
 
         public async Task<ActionResult> Index()
         {
-            int TenantId = 1;
             var categories = await _context.Categories
                 .Where(c => c.PARENTCATEGORYID == null && !c.ISDELETED && c.TenantId == TenantId)
                 .ToListAsync();
@@ -75,15 +81,25 @@ namespace CafeMenuWebApp.Controllers
 
         public async Task<IActionResult> Category(string categoryName)
         {
-            int TenantId = 1;
-
             if (string.IsNullOrEmpty(categoryName))
             {
-                return NotFound(); 
+                return NotFound();
             }
 
             string cacheKey = $"Products_Tenant_{TenantId}_Category_{categoryName}";
-            if (!_cache.TryGetValue(cacheKey, out List<ProductViewModel> products))
+            string cachedProducts = await _cache.GetStringAsync(cacheKey);
+            List<ProductViewModel> products;
+
+            if (cachedProducts != null)
+            {
+                products = JsonSerializer.Deserialize<List<ProductViewModel>>(cachedProducts);
+                decimal exchangeRate = await GetCurrencyRateAsync();
+                foreach (var product in products)
+                {
+                    product.Price *= exchangeRate; // Fix cached prices
+                }
+            }
+            else
             {
                 var selectedCategory = await _context.Categories
                     .FirstOrDefaultAsync(c => c.CATEGORYNAME == categoryName && !c.ISDELETED && c.TenantId == TenantId);
@@ -99,6 +115,7 @@ namespace CafeMenuWebApp.Controllers
                     .ToListAsync();
 
                 decimal exchangeRate = await GetCurrencyRateAsync();
+                Console.WriteLine($"Exchange rate: {exchangeRate}");
 
                 products = await _context.Products
                     .Include(p => p.Category)
@@ -121,15 +138,15 @@ namespace CafeMenuWebApp.Controllers
 
                 if (products == null || !products.Any())
                 {
-                    return NotFound();
+                    ViewBag.CategoryName = categoryName;
+                    return View("NoProducts");
                 }
 
-                var cacheOptions = new MemoryCacheEntryOptions
+                var cacheOptions = new DistributedCacheEntryOptions
                 {
                     AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
                 };
-
-                _cache.Set(cacheKey, products, cacheOptions);
+                await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(products), cacheOptions);
             }
 
             ViewBag.CategoryName = categoryName;

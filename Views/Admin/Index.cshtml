@@ -64,7 +64,7 @@
                 <div class="card">
                     <div class="card-header">Current Currency Rate (USD to TRY)</div>
                     <div class="card-body">
-                        <h5 id="currencyRate">@ViewBag.CurrencyRate</h5>
+                        <h5 id="currencyRate">₺@ViewBag.CurrencyRate</h5>
                     </div>
                 </div>
             </div>
@@ -73,18 +73,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        async function updateCurrencyRate() {
-            try {
-                const response = await fetch('/Admin/GetCurrencyRate');
-                const rate = await response.text();
-                document.getElementById('currencyRate').textContent = '₺' + rate;
-            } catch (error) {
-                console.error('Error fetching currency rate:', error);
-            }
-        }
-        setInterval(updateCurrencyRate, 10000);
-        updateCurrencyRate();
-
         document.querySelectorAll('.category-row').forEach(row => {
             const subList = row.querySelector('.subcategory-list');
             if (subList) {

@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Distributed;
+using CafeMenuWebApp.Views.Admin;
 
 namespace CafeMenuWebApp.Controllers
 {
@@ -14,11 +16,11 @@ namespace CafeMenuWebApp.Controllers
     public class AdminController : Controller
     {
         private readonly ApplicationDbContext _context;
-        public readonly IMemoryCache _cache;
+        public readonly IDistributedCache _cache;
         public readonly IHttpClientFactory _httpClientFactory;
 
 
-        public AdminController(ApplicationDbContext context, IMemoryCache cache, IHttpClientFactory httpClientFactory)
+        public AdminController(ApplicationDbContext context, IDistributedCache cache, IHttpClientFactory httpClientFactory)
         {
             _context = context;
             _cache = cache;
@@ -100,13 +102,14 @@ namespace CafeMenuWebApp.Controllers
 
                 _context.Categories.Add(category);
                 await _context.SaveChangesAsync();
-                return RedirectToAction("Categories");
-            }
 
-            var errors = ModelState.Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value.Errors.Select(e => e.ErrorMessage))}");
-            foreach (var error in errors)
-            {
-                Console.WriteLine($"HATA: {error}");
+                var cacheKeyTopLevel = $"DashboardData_Tenant_{TenantId}";
+                var cacheKeyCategory = $"Products_Tenant_{TenantId}_Category_{category.CATEGORYNAME}";
+
+                await _cache.RemoveAsync(cacheKeyTopLevel);
+                await _cache.RemoveAsync(cacheKeyCategory);
+
+                return RedirectToAction("Categories");
             }
 
             ViewBag.ParentCategories = new SelectList(
@@ -131,6 +134,14 @@ namespace CafeMenuWebApp.Controllers
                 return NotFound();
             }
 
+            var model = new EditCategoryViewModel
+            {
+                CATEGORYID = category.CATEGORYID,
+                CATEGORYNAME = category.CATEGORYNAME,
+                PARENTCATEGORYID = category.PARENTCATEGORYID,
+                CurrentImagePath = category.ImagePath
+            };
+
             ViewBag.ParentCategories = new SelectList(
                 _context.Categories
                     .Where(c => c.TenantId == TenantId && c.CATEGORYID != id && !c.ISDELETED)
@@ -140,56 +151,61 @@ namespace CafeMenuWebApp.Controllers
                 category.PARENTCATEGORYID
             );
 
-            return View(category);
+            return View(model);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditCategory(Category category, IFormFile imageFile)
+        public async Task<IActionResult> EditCategory(EditCategoryViewModel model)
         {
-            
-
             if (ModelState.IsValid)
             {
                 var existingCategory = await _context.Categories
-                    .FirstOrDefaultAsync(c => c.CATEGORYID == category.CATEGORYID && c.TenantId == TenantId && !c.ISDELETED);
+                    .FirstOrDefaultAsync(c => c.CATEGORYID == model.CATEGORYID && c.TenantId == TenantId && !c.ISDELETED);
 
                 if (existingCategory == null)
                 {
                     return NotFound();
                 }
 
-                existingCategory.CATEGORYNAME = category.CATEGORYNAME;
-                existingCategory.PARENTCATEGORYID = category.PARENTCATEGORYID;
+                existingCategory.CATEGORYNAME = model.CATEGORYNAME;
+                existingCategory.PARENTCATEGORYID = model.PARENTCATEGORYID;
 
-                if (imageFile != null && imageFile.Length > 0)
+                if (model.ImageFile != null && model.ImageFile.Length > 0)
                 {
-                    var fileName = Path.GetFileName(imageFile.FileName);
+                    var fileName = Path.GetFileName(model.ImageFile.FileName);
                     var filePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images", fileName);
-
                     using (var stream = new FileStream(filePath, FileMode.Create))
                     {
-                        await imageFile.CopyToAsync(stream);
+                        await model.ImageFile.CopyToAsync(stream);
                     }
-
                     existingCategory.ImagePath = $"/images/{fileName}";
                 }
 
                 _context.Categories.Update(existingCategory);
                 await _context.SaveChangesAsync();
+
+                var cacheKey = $"DashboardData_Tenant_{TenantId}";
+                await _cache.RemoveAsync(cacheKey);
+
                 return RedirectToAction("Categories");
+            }
+
+            foreach (var error in ModelState.Values.SelectMany(v => v.Errors))
+            {
+                Console.WriteLine($"Validation Error: {error.ErrorMessage}");
             }
 
             ViewBag.ParentCategories = new SelectList(
                 _context.Categories
-                    .Where(c => c.TenantId == TenantId && !c.ISDELETED && c.CATEGORYID != category.CATEGORYID)
+                    .Where(c => c.TenantId == TenantId && !c.ISDELETED && c.CATEGORYID != model.CATEGORYID)
                     .Select(c => new { c.CATEGORYID, c.CATEGORYNAME }),
-            "CATEGORYID",
-            "CATEGORYNAME",
-            category.PARENTCATEGORYID
+                "CATEGORYID",
+                "CATEGORYNAME",
+                model.PARENTCATEGORYID
             );
 
-            return View(category);
+            return View(model);
         }
 
         [HttpPost]
@@ -228,8 +244,9 @@ namespace CafeMenuWebApp.Controllers
             _context.Categories.Update(category);
             await _context.SaveChangesAsync();
 
-            var cacheKey = $"TopLevelProductCounts_Tenant_{TenantId}";
-            _cache.Remove(cacheKey);
+            var cacheKey = $"DashboardData_Tenant_{TenantId}";
+            await _cache.RemoveAsync(cacheKey);
+
 
             return RedirectToAction("Categories");
         }
@@ -296,7 +313,6 @@ namespace CafeMenuWebApp.Controllers
                 "Display"
             );
 
-
             return View(product);
         }
 
@@ -340,6 +356,10 @@ namespace CafeMenuWebApp.Controllers
 
                     _context.Products.Add(product);
                     await _context.SaveChangesAsync();
+
+                    var cacheKey = $"DashboardData_Tenant_{TenantId}";
+                    await _cache.RemoveAsync(cacheKey);
+
                     Console.WriteLine($"Product saved with ID: {product.ProductId}");
 
                     if (product.ProductProperties.Any())
@@ -389,9 +409,8 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteProduct(int id, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> DeleteProduct(int id) 
         {
-            
             var product = await _context.Products
                 .Include(p => p.Category)
                 .FirstOrDefaultAsync(p => p.ProductId == id && p.TenantId == TenantId && !p.IsDeleted);
@@ -416,7 +435,6 @@ namespace CafeMenuWebApp.Controllers
                 _context.ProductProperties.UpdateRange(associatedProductProperties);
             }
 
-
             _context.Products.Update(product);
             await _context.SaveChangesAsync();
 
@@ -425,8 +443,11 @@ namespace CafeMenuWebApp.Controllers
             if (!string.IsNullOrEmpty(categoryName))
             {
                 string newCacheKey = $"Products_Tenant_{TenantId}_Category_{categoryName}";
-                cache.Remove(newCacheKey);
+                await _cache.RemoveAsync(newCacheKey); 
             }
+
+            var cacheKey = $"DashboardData_Tenant_{TenantId}";
+            await _cache.RemoveAsync(cacheKey); 
 
             return RedirectToAction("Products", new { categoryId = product.CategoryId });
         }
@@ -551,7 +572,7 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteProperty(int propertyId, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> DeleteProperty(int propertyId)
         {
             
             var property = await _context.Properties
@@ -586,12 +607,13 @@ namespace CafeMenuWebApp.Controllers
             if (!string.IsNullOrEmpty(categoryName))
             {
                 string newCacheKey = $"Products_Tenant_{TenantId}_Category_{categoryName}";
-                cache.Remove(newCacheKey);
+                await _cache.RemoveAsync(newCacheKey);
             }
 
 
             _context.Properties.Update(property);
             _context.ProductProperties.UpdateRange(productProperties);
+
             await _context.SaveChangesAsync();
             return RedirectToAction("Properties");
         }
@@ -612,7 +634,7 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditProperty(CafeMenuWebApp.Models.Property model, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> EditProperty(CafeMenuWebApp.Models.Property model)
         {
             
 
@@ -645,7 +667,7 @@ namespace CafeMenuWebApp.Controllers
                 foreach (var categoryName in affectedCategoryNames)
                 {
                     string cacheKey = $"{categoryName}Products";
-                    cache.Remove(cacheKey);
+                    await _cache.RemoveAsync(cacheKey);
                 }
 
                 return RedirectToAction("Properties");
@@ -674,11 +696,7 @@ namespace CafeMenuWebApp.Controllers
 
                 return RedirectToAction("Properties");
             }
-            var errors = ModelState.Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value.Errors.Select(e => e.ErrorMessage))}");
-            foreach (var error in errors)
-            {
-                Console.WriteLine($"HATA: {error}");
-            }
+            
             return View("AddProperty", model);
         }
 
@@ -714,7 +732,7 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AddProductProperty(int PRODUCTID, int[] PROPERTYIDs, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> AddProductProperty(int PRODUCTID, int[] PROPERTYIDs)
         {
             
             var existingProductProperties = await _context.ProductProperties
@@ -751,7 +769,7 @@ namespace CafeMenuWebApp.Controllers
                 if (!string.IsNullOrEmpty(categoryName))
                 {
                     string cacheKey = $"Products_Tenant_{TenantId}_Category_{categoryName}";
-                    cache.Remove(cacheKey);
+                    await _cache.RemoveAsync(cacheKey);
                 }
             }
             else
@@ -802,7 +820,7 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditProductProperty(ProductProperty model, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> EditProductProperty(ProductProperty model)
         {
             
 
@@ -837,12 +855,12 @@ namespace CafeMenuWebApp.Controllers
                 if (!string.IsNullOrEmpty(oldCategoryName))
                 {
                     string oldCacheKey = $"Products_Tenant_{TenantId}_Category_{oldCategoryName}";
-                    cache.Remove(oldCacheKey);
+                    await _cache.RemoveAsync(oldCacheKey);
                 }
                 if (!string.IsNullOrEmpty(newCategoryName) && newCategoryName != oldCategoryName)
                 {
                     string newCacheKey = $"Products_Tenant_{TenantId}_Category_{newCategoryName}";
-                    cache.Remove(newCacheKey);
+                    await _cache.RemoveAsync(newCacheKey);
                 }
 
                 return RedirectToAction("ProductProperties");
@@ -878,7 +896,7 @@ namespace CafeMenuWebApp.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteProductProperty(int id, [FromServices] IMemoryCache cache)
+        public async Task<IActionResult> DeleteProductProperty(int id)
         {
             
             var productProperty = await _context.ProductProperties
@@ -900,7 +918,7 @@ namespace CafeMenuWebApp.Controllers
             if (!string.IsNullOrEmpty(categoryName))
             {
                 string newCacheKey = $"Products_Tenant_{TenantId}_Category_{categoryName}";
-                cache.Remove(newCacheKey);
+                await _cache.RemoveAsync(newCacheKey);
             }
 
             return RedirectToAction("ProductProperties");
@@ -908,10 +926,19 @@ namespace CafeMenuWebApp.Controllers
 
         public async Task<IActionResult> Index()
         {
-            
-            var cacheKey = $"TopLevelProductCounts_Tenant_{TenantId}";
+            var cacheKey = $"DashboardData_Tenant_{TenantId}"; 
 
-            if (!_cache.TryGetValue(cacheKey, out List<ProductCountByCategoryViewModel> productCounts))
+            string cachedData = await _cache.GetStringAsync(cacheKey);
+            List<ProductCountByCategoryViewModel> productCounts;
+            decimal currencyRate;
+
+            if (cachedData != null)
+            {
+                var cachedDashboard = JsonSerializer.Deserialize<DashboardViewModel>(cachedData);
+                productCounts = cachedDashboard.ProductCounts;
+                currencyRate = cachedDashboard.CurrencyRate;
+            }
+            else
             {
                 var categories = await _context.Categories
                     .Where(c => c.TenantId == TenantId && !c.ISDELETED)
@@ -955,11 +982,22 @@ namespace CafeMenuWebApp.Controllers
                 }
 
                 productCounts = topLevelCounts.Values.ToList();
-                _cache.Set(cacheKey, productCounts, TimeSpan.FromMinutes(10));
+                currencyRate = await GetCurrencyRateAsync();
+
+                var dashboardData = new DashboardViewModel
+                {
+                    ProductCounts = productCounts,
+                    CurrencyRate = currencyRate
+                };
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                };
+                await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(dashboardData), cacheOptions);
             }
 
             ViewBag.ProductCounts = productCounts;
-            ViewBag.CurrencyRate = await GetCurrencyRateAsync();
+            ViewBag.CurrencyRate = currencyRate;
 
             return View();
         }
@@ -980,6 +1018,7 @@ namespace CafeMenuWebApp.Controllers
         {
             var client = _httpClientFactory.CreateClient();
             string apiKey = "26e9b072bfe042128c6410fb86061fb8";
+
             string url = $"https://openexchangerates.org/api/latest.json?app_id={apiKey}&base=USD";
 
             try
