@@ -926,8 +926,7 @@ namespace CafeMenuWebApp.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var cacheKey = $"DashboardData_Tenant_{TenantId}"; 
-
+            var cacheKey = $"DashboardData_Tenant_{TenantId}";
             string cachedData = await _cache.GetStringAsync(cacheKey);
             List<ProductCountByCategoryViewModel> productCounts;
             decimal currencyRate;
@@ -982,7 +981,7 @@ namespace CafeMenuWebApp.Controllers
                 }
 
                 productCounts = topLevelCounts.Values.ToList();
-                currencyRate = await GetCurrencyRateAsync();
+                currencyRate = await GetCurrencyRateAsync(); 
 
                 var dashboardData = new DashboardViewModel
                 {
@@ -991,7 +990,7 @@ namespace CafeMenuWebApp.Controllers
                 };
                 var cacheOptions = new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) 
                 };
                 await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(dashboardData), cacheOptions);
             }
@@ -1016,9 +1015,17 @@ namespace CafeMenuWebApp.Controllers
 
         private async Task<decimal> GetCurrencyRateAsync()
         {
+            const string cacheKey = "USdtoTRYRate";
+            string cachedRate = await _cache.GetStringAsync(cacheKey);
+            if (!string.IsNullOrEmpty(cachedRate))
+            {
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Cache HIT: Rate = {cachedRate}");
+                return decimal.Parse(cachedRate);
+            }
+
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Cache MISS: Fetching from API...");
             var client = _httpClientFactory.CreateClient();
             string apiKey = "26e9b072bfe042128c6410fb86061fb8";
-
             string url = $"https://openexchangerates.org/api/latest.json?app_id={apiKey}&base=USD";
 
             try
@@ -1026,21 +1033,28 @@ namespace CafeMenuWebApp.Controllers
                 var response = await client.GetStringAsync(url);
                 var json = JsonSerializer.Deserialize<Dictionary<string, object>>(response);
                 var rates = JsonSerializer.Deserialize<Dictionary<string, decimal>>(json["rates"].ToString());
-                
-                return rates["TRY"];
+                decimal rate = rates["TRY"];
+
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(10)
+                };
+                await _cache.SetStringAsync(cacheKey, rate.ToString(), cacheOptions);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Cached new rate: {rate}");
+
+                return rate;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Currency API error: {ex.Message}");
-                return 1.0m; 
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Currency API error: {ex.Message}");
+                return 1.0m;
             }
         }
 
         [HttpGet]
         public async Task<IActionResult> GetCurrencyRate()
         {
-            var rate = await GetCurrencyRateAsync();
-
+            var rate = await GetCurrencyRateAsync(); 
             return Content(rate.ToString());
         }
     }
